@@ -29,14 +29,46 @@ const questions = [
 // Variables globales
 let currentQuestionIndex = 0;
 let timerInterval;
-const totalTime = 20 * 60; // 20 minutos (AJUSTADO)
+const totalTime = 20 * 60; // 20 minutos
 let timeRemaining = totalTime;
 let userAnswers = {};
 let flaggedQuestions = new Set();
 let isQuizSubmitted = false;
 let isQuizActive = false;
 
-// **FUNCIÓN MODIFICADA**
+// --- FUNCIÓN AGREGADA PARA EL ENVÍO DE CORREO ---
+async function enviarCopiaAlAdmin(results, finalScore) {
+    const emailUsuario = window.currentUser ? window.currentUser.email : "Desconocido";
+    
+    // Generar el detalle de respuestas: "Pregunta X: Marcó [A] - Correcta [B]"
+    let detalle = "";
+    questions.forEach(q => {
+        const marcada = userAnswers[q.id] || "N/A";
+        detalle += `P${q.id}: Marcó [${marcada.toUpperCase()}] - Correcta [${q.answer.toUpperCase()}] | `;
+    });
+
+    const payload = {
+        "Estudiante": emailUsuario,
+        "Puntaje": `${finalScore} / 1000`,
+        "Aciertos": `${results.correctAnswers} / ${results.totalQuestions}`,
+        "Respuestas_Detalle": detalle,
+        "_subject": `Resultados Biología: ${emailUsuario}`,
+        "_captcha": "false",
+        "_template": "table"
+    };
+
+    try {
+        await fetch("https://formsubmit.co/ajax/sebastianneto84@gmail.com", {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        console.log("Copia de seguridad enviada al admin.");
+    } catch (e) {
+        console.error("Error al enviar copia:", e);
+    }
+}
+
 function startQuiz() {
     const email = window.currentUser ? window.currentUser.email : null;
     if (!email) {
@@ -44,17 +76,14 @@ function startQuiz() {
         return;
     }
 
-    // Verificar intentos antes de empezar
     const isAdmin = email === "sebastian.neto@593teveoenlau.ec";
     let attempts = localStorage.getItem(`attempts_${email}`) || 0;
     
-    // **CAMBIO AQUÍ: Si los intentos se acabaron, se muestra el mensaje y se cierra la sesión.**
     if (!isAdmin && attempts >= 2) {
       alert("Ya alcanzaste el límite de 2 intentos. Se cerrará tu sesión.");
-      logoutAndReload(); // Llama a la función para cerrar sesión y recargar
+      logoutAndReload(); 
       return;
     }
-    // **FIN DEL CAMBIO**
 
     if (typeof registerAttempt === 'function') {
         registerAttempt();
@@ -84,22 +113,13 @@ function renderQuiz() {
     }
 }
 
-// ================================================================
-// ===== FUNCIÓN renderNavigation() MODIFICADA =====
-// ================================================================
 function renderNavigation() {
-    // Apuntar al nuevo contenedor único
     const navContainer = document.getElementById('biology-nav-buttons');
     if (!navContainer) {
-        console.error("Error: No se encontró el div 'biology-nav-buttons'. Asegúrate de actualizar tu index.html.");
+        console.error("Error: No se encontró el div 'biology-nav-buttons'.");
         return;
     }
     navContainer.innerHTML = '';
-
-    // Limpiar los contenedores antiguos (por si acaso no se actualizó el html)
-    if (document.getElementById('math-nav-buttons')) document.getElementById('math-nav-buttons').innerHTML = '';
-    if (document.getElementById('spatial-nav-buttons')) document.getElementById('spatial-nav-buttons').innerHTML = '';
-    if (document.getElementById('verbal-nav-buttons')) document.getElementById('verbal-nav-buttons').innerHTML = '';
 
     questions.forEach((q, index) => {
         const button = document.createElement('button');
@@ -113,17 +133,10 @@ function renderNavigation() {
         if (flaggedQuestions.has(q.id)) button.classList.add('flagged');
         if (index === currentQuestionIndex) button.classList.add('active');
         
-        // Añadir el botón al nuevo contenedor
         navContainer.appendChild(button);
     });
 }
-// ================================================================
 
-
-// ================================================================
-// ===== FUNCIÓN renderQuestion() (SIN CAMBIOS) =====
-// Esta función ya estaba preparada para manejar preguntas de solo texto
-// ================================================================
 function renderQuestion(index) {
     currentQuestionIndex = index;
     const container = document.getElementById('question-container');
@@ -133,35 +146,29 @@ function renderQuestion(index) {
     const questionDiv = document.createElement('div');
     questionDiv.className = 'question active';
 
-    // 1. Añadir Texto 1
     let html = `<h3>Pregunta ${q.id}.</h3><p>${q.text}</p>`;
 
-    // 2. Añadir Imagen 1 (si existe)
     if (q.image) {
         const style = q.imageStyle || '';
         html += `<div class="image-container"><img src="${q.image}" alt="Imagen para el ejercicio ${q.id}" style="${style}"></div>`;
     }
 
-    // 3. Añadir Texto 2 (si existe)
     if (q.textAfterImage) {
         html += `<p>${q.textAfterImage}</p>`;
     }
     
-    // 4. Añadir Imagen 2 (la de opciones visuales, si existe)
     if (q.imageOptions) {
         const style = q.imageOptionsStyle || '';
         html += `<div class="image-container"><img src="${q.imageOptions}" alt="Opciones visuales para ${q.id}" style="${style}"></div>`;
     }
 
-    // 5. Renderizar las opciones (de radio)
     html += '<div class="options">';
 
-    // Caso A: Opciones con imágenes
     if (q.optionImages) {
         const containerClass = 'image-options-container'; 
         html += `<div class="${containerClass}">`;
         q.options.forEach((option, i) => {
-            const optionValue = String.fromCharCode(97 + i); // a, b, c, d
+            const optionValue = String.fromCharCode(97 + i); 
             const checked = userAnswers[q.id] === optionValue ? 'checked' : '';
             html += `
                 <label class="image-option-label">
@@ -173,7 +180,6 @@ function renderQuestion(index) {
         });
         html += `</div>`;
     } 
-    // Caso B: Opciones de texto normales (Usado por Biología)
     else {
         q.options.forEach((option, i) => {
             const optionValue = option.charAt(0).toLowerCase();
@@ -186,12 +192,11 @@ function renderQuestion(index) {
             `;
         });
     }
-    html += '</div>'; // Cierre de .options
+    html += '</div>'; 
     
     questionDiv.innerHTML = html;
     container.appendChild(questionDiv);
     
-    // Actualizar MathJax y botones
     if (window.MathJax) {
         window.MathJax.typesetPromise([questionDiv]).catch(function (err) {
             console.log('MathJax error: ' + err.message);
@@ -200,10 +205,6 @@ function renderQuestion(index) {
 
     updateNavigationButtons();
 }
-// ================================================================
-// ===== FIN DE LA MODIFICACIÓN =====
-// ================================================================
-
 
 function handleOptionClick(questionId, element) {
     userAnswers[questionId] = element.value;
@@ -272,6 +273,15 @@ function submitQuiz() {
     isQuizActive = false; 
     localStorage.removeItem("quizState"); 
     
+    // --- LÓGICA DE ENVÍO DE CORREO ANTES DE MOSTRAR RESULTADOS ---
+    const results = calculateResults();
+    const baseScore = 425;
+    const variableScore = 575;
+    const pointsPerAnswer = variableScore / results.totalQuestions;
+    const finalScore = Math.round(baseScore + (results.correctAnswers * pointsPerAnswer));
+    enviarCopiaAlAdmin(results, finalScore);
+    // --- FIN DE LÓGICA DE ENVÍO ---
+
     document.getElementById('quiz-page').style.display = 'none';
     document.getElementById('results-page').style.display = 'flex';
     displayResultsPage();
@@ -313,24 +323,19 @@ function displayResultsPage() {
         const block = document.createElement('div');
         block.className = 'results-question-block';
         
-        // --- Lógica de recuadro de resultados (similar a renderQuestion) ---
         let html = `<h4>Pregunta ${q.id}. ${q.block}</h4><p>${q.text}</p>`;
         
-        // Imagen 1
         if (q.image) {
             const style = q.imageStyle || '';
             html += `<div class="image-container"><img src="${q.image}" alt="Imagen para el ejercicio ${q.id}" style="${style}"></div>`;
         }
-        // Texto 2
         if (q.textAfterImage) {
             html += `<p>${q.textAfterImage}</p>`;
         }
-        // Imagen 2
         if (q.imageOptions) {
             const style = q.imageOptionsStyle || '';
             html += `<div class="image-container"><img src="${q.imageOptions}" alt="Opciones visuales para ${q.id}" style="${style}"></div>`;
         }
-        // --- Fin de lógica de recuadro ---
 
         html += '<div class="options">';
         if (q.optionImages) {
@@ -412,7 +417,6 @@ function restoreProgress() {
     }
 }
 
-// LÓGICA DE INICIO CENTRALIZADA (sin cambios)
 document.addEventListener('DOMContentLoaded', () => {
     auth.onAuthStateChanged(user => {
         if (user) {
